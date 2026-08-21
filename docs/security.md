@@ -81,6 +81,31 @@ Moving to a dedicated project later means re-running `bootstrap.sh` with a
 different `PROJECT` and re-connecting accounts; nothing in the code assumes the
 project it sits in.
 
+## CI deployment credentials
+
+GitHub Actions deploys Cloud Run via Workload Identity Federation, not a service
+account key. The distinction matters: a JSON key in repository secrets is a
+permanent credential that is compromised the moment the repo, a fork, or a
+workflow log exposes it, and rotating it is a manual chore nobody remembers. WIF
+issues credentials that live for minutes and cannot be exfiltrated in a usable
+form.
+
+Two boundaries make the exchange safe:
+
+* The OIDC provider carries `attribute-condition` pinning it to this repository
+  owner. Without that condition **any** GitHub repository on the internet could
+  present a token and impersonate the deploy account — it is the single most
+  important line in `infra/setup-github-oidc.sh`.
+* The `roles/iam.workloadIdentityUser` binding names one repository, not the
+  owner's whole account, so no other repo under the same owner can deploy.
+
+The `github-deployer` account holds deploy-time roles only — `run.admin`,
+`cloudbuild.builds.editor`, `artifactregistry.writer`, `storage.objectAdmin`,
+plus `iam.serviceAccountUser` scoped to the runtime account it deploys as. It
+deliberately has **no** `secretmanager.secretAccessor`: the workflow runs with
+`MANAGE_SCHEDULER=false` so it never needs to read the sync token. A CI account
+that cannot read secrets cannot leak them into a build log.
+
 ## Known limits
 
 - A session token stays valid for its full TTL (default 30 days). There is no
