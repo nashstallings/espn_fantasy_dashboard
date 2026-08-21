@@ -1,0 +1,91 @@
+[
+  {
+    "name": "snapshot_date",
+    "type": "DATE",
+    "mode": "REQUIRED",
+    "description": "Date of the snapshot run; the table's partition key."
+  },
+  {
+    "name": "snapshot_ts",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Exact time the snapshot was taken."
+  },
+  {
+    "name": "league_key",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "season:league_id, the natural key for a league-season."
+  },
+  {
+    "name": "league_id",
+    "type": "STRING",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "season",
+    "type": "INTEGER",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "week",
+    "type": "INTEGER",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "team_id",
+    "type": "INTEGER",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "team_name",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "power_rank",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "standings_rank",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "power_score",
+    "type": "FLOAT",
+    "mode": "NULLABLE",
+    "description": "0-100 blend; see analytics.py"
+  },
+  {
+    "name": "all_play_win_pct",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "scoring_component",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "recent_form_component",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "win_pct",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "points_per_game",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "recent_points_per_game",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  }
+]

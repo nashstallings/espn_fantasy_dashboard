@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Environment / secrets — never commit ESPN cookies or keys
+.env
+.env.*
+!.env.example
+*-key.json
+service-account*.json
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Node (frontend has no build step today; keep this for future tooling)
+node_modules/

@@ -1,0 +1,29 @@
+[project]
+name = "espn-fantasy-dashboard"
+version = "0.1.0"
+description = "Backend proxy and sync jobs for the ESPN Fantasy Football league dashboard"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+# B008: `Depends(...)` in a default is how FastAPI declares dependencies.
+ignore = ["B008"]
