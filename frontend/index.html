@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fantasy League Dashboard</title>
+    <meta
+      name="description"
+      content="Standings, matchups, rosters, transactions, and power rankings for your ESPN fantasy football leagues."
+    />
+    <link rel="stylesheet" href="./css/styles.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏈</text></svg>"
+    />
+    <script src="./config.js"></script>
+  </head>
+  <body>
+    <div id="app" class="app" hidden>
+      <header class="topbar">
+        <div class="topbar__brand">
+          <span class="topbar__mark" aria-hidden="true">🏈</span>
+          <span>League Dashboard</span>
+        </div>
+        <div class="topbar__controls">
+          <label class="field field--inline">
+            <span class="field__label">League</span>
+            <select id="league-select" aria-label="Select league"></select>
+          </label>
+          <button id="refresh" class="button button--ghost" type="button" title="Refresh now">
+            Refresh
+          </button>
+          <button id="account" class="button button--ghost" type="button">Account</button>
+        </div>
+      </header>
+
+      <nav class="tabs" id="tabs" role="tablist">
+        <button class="tab" role="tab" data-view="overview">Overview</button>
+        <button class="tab" role="tab" data-view="standings">Standings</button>
+        <button class="tab" role="tab" data-view="matchups">Matchups</button>
+        <button class="tab" role="tab" data-view="rosters">Rosters</button>
+        <button class="tab" role="tab" data-view="transactions">Transactions</button>
+        <button class="tab" role="tab" data-view="power">Power Rankings</button>
+      </nav>
+
+      <main id="view" class="view" role="tabpanel" aria-live="polite"></main>
+      <footer class="footer">
+        <span id="footer-note"></span>
+      </footer>
+    </div>
+
+    <!-- Connect screen: the only place ESPN cookies are ever typed. -->
+    <div id="connect" class="connect" hidden>
+      <div class="connect__card">
+        <h1 class="connect__title"><span aria-hidden="true">🏈</span> League Dashboard</h1>
+        <p class="connect__lede">
+          ESPN has no "sign in with ESPN" for third-party apps, so this connects using the two
+          session cookies your own browser already holds. Nothing here creates an account and no
+          password is ever stored.
+        </p>
+
+        <form id="connect-form" class="form" autocomplete="off">
+          <label class="field">
+            <span class="field__label">SWID</span>
+            <input
+              id="swid"
+              name="swid"
+              type="text"
+              required
+              spellcheck="false"
+              placeholder="{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}"
+            />
+            <span class="field__hint">Braces optional — we add them.</span>
+          </label>
+
+          <label class="field">
+            <span class="field__label">espn_s2</span>
+            <textarea
+              id="espn_s2"
+              name="espn_s2"
+              required
+              rows="3"
+              spellcheck="false"
+              placeholder="AEB...long value..."
+            ></textarea>
+            <span class="field__hint">Treated like a password: encrypted at rest, never shown again.</span>
+          </label>
+
+          <label class="field">
+            <span class="field__label">League ID <span class="field__optional">optional</span></span>
+            <input id="league_id" name="league_id" type="text" inputmode="numeric" placeholder="123456" />
+            <span class="field__hint">
+              Only needed if automatic league discovery misses your leagues.
+            </span>
+          </label>
+
+          <button id="connect-submit" class="button button--primary" type="submit">Connect</button>
+          <p id="connect-status" class="status" role="status"></p>
+        </form>
+
+        <details class="help">
+          <summary>Where do I find these cookies?</summary>
+          <ol>
+            <li>Log in at <strong>fantasy.espn.com</strong> in your browser.</li>
+            <li>Open developer tools (<kbd>F12</kbd>) → <strong>Application</strong> → <strong>Cookies</strong> → <code>https://fantasy.espn.com</code>.</li>
+            <li>Copy the values of <code>SWID</code> and <code>espn_s2</code>.</li>
+            <li>Paste them above. They are validated against ESPN before anything is saved.</li>
+          </ol>
+          <p class="help__note">
+            These are live ESPN session credentials. Only paste them into software you trust, and
+            use <strong>Disconnect</strong> here (or log out of ESPN) to invalidate them.
+          </p>
+        </details>
+      </div>
+    </div>
+
+    <dialog id="account-dialog" class="dialog">
+      <form method="dialog" class="dialog__body">
+        <h2 class="dialog__title">Account</h2>
+        <dl class="kv" id="account-details"></dl>
+
+        <h3 class="dialog__subtitle">Add a league by ID</h3>
+        <div class="dialog__row">
+          <input id="add-league-id" type="text" inputmode="numeric" placeholder="League ID" />
+          <input id="add-league-season" type="number" placeholder="Season" min="2000" max="2100" />
+          <button id="add-league" class="button" type="button">Add</button>
+        </div>
+        <p id="account-status" class="status" role="status"></p>
+
+        <div class="dialog__actions">
+          <button id="disconnect" class="button button--danger" type="button">
+            Disconnect &amp; delete my data
+          </button>
+          <button class="button button--ghost" value="close">Close</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>

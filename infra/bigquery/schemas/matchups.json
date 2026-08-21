@@ -1,0 +1,85 @@
+[
+  {
+    "name": "snapshot_date",
+    "type": "DATE",
+    "mode": "REQUIRED",
+    "description": "Date of the snapshot run; the table's partition key."
+  },
+  {
+    "name": "snapshot_ts",
+    "type": "TIMESTAMP",
+    "mode": "REQUIRED",
+    "description": "Exact time the snapshot was taken."
+  },
+  {
+    "name": "league_key",
+    "type": "STRING",
+    "mode": "REQUIRED",
+    "description": "season:league_id, the natural key for a league-season."
+  },
+  {
+    "name": "league_id",
+    "type": "STRING",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "season",
+    "type": "INTEGER",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "matchup_id",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "week",
+    "type": "INTEGER",
+    "mode": "REQUIRED"
+  },
+  {
+    "name": "playoff_tier",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "winner",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "is_complete",
+    "type": "BOOLEAN",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "home_team_id",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "home_team_name",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "home_points",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "away_team_id",
+    "type": "INTEGER",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "away_team_name",
+    "type": "STRING",
+    "mode": "NULLABLE"
+  },
+  {
+    "name": "away_points",
+    "type": "FLOAT",
+    "mode": "NULLABLE"
+  }
+]
