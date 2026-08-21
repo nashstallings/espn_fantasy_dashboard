@@ -92,10 +92,18 @@ cd backend && ruff check . && pytest -q
 ## Deploy
 
 ```bash
-export PROJECT=your-gcp-project
 ./infra/bootstrap.sh   # APIs, service account, Firestore, secrets, BigQuery tables
 ./infra/deploy.sh      # Cloud Run + the daily snapshot schedule
 ```
+
+Both scripts default to the `ff-python-api` project, which this app shares with
+Dynasty Tycoon. Override with `PROJECT=other-project ./infra/bootstrap.sh`.
+`bootstrap.sh` checks that billing is enabled before it provisions anything, so
+a missing billing link fails immediately rather than halfway through.
+
+The BigQuery dataset is created in the `US` multi-region (`BQ_LOCATION`) to match
+the other datasets in that project — BigQuery can't join across locations, so a
+lone `us-central1` dataset would be permanently unjoinable to them.
 
 `bootstrap.sh` generates the encryption key, JWT secret, and sync token into
 Secret Manager — they are never in the repo. Then put the Cloud Run URL into
