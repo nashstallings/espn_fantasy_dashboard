@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -87,8 +88,13 @@ class ESPNClient:
     ) -> Any:
         cookies = credentials.as_cookies() if credentials else None
         request_headers = {**BASE_HEADERS, **(headers or {})}
+        # Redirects are NOT followed. ESPN answers an unauthenticated API request
+        # with a 302 to a login page; following it turns an auth failure into a
+        # 200 full of HTML, which then surfaces as a confusing "non-JSON
+        # response" instead of "your cookies do not work". A 3xx from a JSON API
+        # is an auth problem, and is reported as one below.
         async with httpx.AsyncClient(
-            timeout=self._timeout, transport=self._transport, follow_redirects=True
+            timeout=self._timeout, transport=self._transport, follow_redirects=False
         ) as client:
             try:
                 response = await client.get(
@@ -104,6 +110,14 @@ class ESPNClient:
                 "ESPN rejected these credentials for this league "
                 "(cookies expired, or this account has no access)"
             )
+        if 300 <= response.status_code < 400:
+            # Only the host is reported: a redirect URL can carry query
+            # parameters, and those are not ours to log.
+            target = urlsplit(response.headers.get("location", "")).netloc or "an unknown host"
+            raise ESPNAuthError(
+                f"ESPN redirected to {target} instead of returning data — "
+                "this normally means the cookies are expired or not entitled to this league"
+            )
         if response.status_code == 404:
             raise ESPNNotFoundError("ESPN has no such league or season")
         if response.status_code >= 500:
@@ -114,8 +128,22 @@ class ESPNClient:
         try:
             return response.json()
         except ValueError as exc:
-            # A login redirect that lands on HTML is the usual cause here.
-            raise ESPNSchemaError("ESPN returned a non-JSON response") from exc
+            # Carry enough detail to diagnose without another deploy. The body is
+            # ESPN's own response, so a short excerpt is safe to surface; the
+            # request's cookies are never part of it.
+            content_type = response.headers.get("content-type", "unknown")
+            excerpt = " ".join(response.text[:200].split())
+            logger.warning(
+                "non-JSON from %s (status %s, content-type %s): %s",
+                urlsplit(str(response.url)).path,
+                response.status_code,
+                content_type,
+                excerpt,
+            )
+            raise ESPNSchemaError(
+                f"ESPN returned {content_type} instead of JSON "
+                f"(status {response.status_code}): {excerpt[:120]}"
+            ) from exc
 
     async def _request_any_host(
         self,
