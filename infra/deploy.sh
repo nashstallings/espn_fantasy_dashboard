@@ -53,10 +53,16 @@ SCHEDULE_ARGS=(
   --location "${REGION}"
   --project "${PROJECT}"
 )
+# stdout is discarded deliberately: gcloud echoes the created job's full
+# configuration, and that includes the X-Sync-Token header in plaintext. Printing
+# it puts a live credential into terminal scrollback, CI logs, and any screenshot
+# of this run. stderr is kept so real failures still surface.
 if gcloud scheduler jobs describe "${JOB}" --location "${REGION}" --project "${PROJECT}" >/dev/null 2>&1; then
-  gcloud scheduler jobs update http "${JOB}" "${SCHEDULE_ARGS[@]}"
+  gcloud scheduler jobs update http "${JOB}" "${SCHEDULE_ARGS[@]}" >/dev/null
+  echo "    updated ${JOB} (daily 09:00 UTC)"
 else
-  gcloud scheduler jobs create http "${JOB}" "${SCHEDULE_ARGS[@]}"
+  gcloud scheduler jobs create http "${JOB}" "${SCHEDULE_ARGS[@]}" >/dev/null
+  echo "    created ${JOB} (daily 09:00 UTC)"
 fi
 
 echo "==> Done."

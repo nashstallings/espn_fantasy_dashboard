@@ -106,6 +106,25 @@ deliberately has **no** `secretmanager.secretAccessor`: the workflow runs with
 `MANAGE_SCHEDULER=false` so it never needs to read the sync token. A CI account
 that cannot read secrets cannot leak them into a build log.
 
+## Rotating the sync token
+
+The sync token guards `POST /internal/sync`. Holding it lets someone trigger
+snapshot runs — Cloud Run time, ESPN API load, and the league ids of any league
+that errors mid-sync. It does not expose cookies, league data, or the encryption
+key. Rotate it if it is ever printed, pasted, or screenshotted:
+
+```bash
+python3 -c 'import secrets;print(secrets.token_urlsafe(32))' \
+  | gcloud secrets versions add espn-sync-token --data-file=- --project ff-python-api
+
+./infra/deploy.sh   # pushes the new value into the Cloud Scheduler job
+```
+
+`deploy.sh` sends the scheduler `create`/`update` output to `/dev/null` precisely
+because gcloud echoes the job's full configuration, header values included. Any
+future change to that block must keep it quiet — a credential printed once lives
+in scrollback and screenshots indefinitely.
+
 ## Known limits
 
 - A session token stays valid for its full TTL (default 30 days). There is no
