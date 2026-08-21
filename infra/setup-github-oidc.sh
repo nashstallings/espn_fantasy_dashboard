@@ -20,6 +20,25 @@ RUNTIME_SA="${RUNTIME_SA:-espn-dashboard-api}"
 DEPLOYER_EMAIL="${DEPLOYER}@${PROJECT}.iam.gserviceaccount.com"
 RUNTIME_EMAIL="${RUNTIME_SA}@${PROJECT}.iam.gserviceaccount.com"
 
+# A service account is not immediately visible to the IAM policy service after
+# it is created — binding a role to it seconds later fails with
+# "Service account ... does not exist". That is propagation lag, not a real
+# error, and it is the single most common way these scripts fall over.
+#
+# Retry with backoff, swallowing output until the last attempt so a genuine
+# failure still surfaces its real message.
+retry_iam () {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "    IAM not settled yet, retrying in $((attempt * 5))s..."
+    sleep $((attempt * 5))
+  done
+  "$@"  # final attempt, unsuppressed, so the real error is visible
+}
+
 echo "==> Enabling APIs"
 gcloud services enable \
   iamcredentials.googleapis.com \
@@ -43,17 +62,17 @@ for ROLE in \
   roles/artifactregistry.writer \
   roles/storage.objectAdmin
 do
-  gcloud projects add-iam-policy-binding "${PROJECT}" \
-    --member "serviceAccount:${DEPLOYER_EMAIL}" --role "${ROLE}" --condition=None >/dev/null
+  retry_iam gcloud projects add-iam-policy-binding "${PROJECT}" \
+    --member "serviceAccount:${DEPLOYER_EMAIL}" --role "${ROLE}" --condition=None
 done
 
 # Deploying a service that *runs as* the runtime account requires impersonating
 # it. Scoped to that one account rather than granted project-wide.
 echo "==> Letting the deployer act as ${RUNTIME_SA}"
-gcloud iam service-accounts add-iam-policy-binding "${RUNTIME_EMAIL}" \
+retry_iam gcloud iam service-accounts add-iam-policy-binding "${RUNTIME_EMAIL}" \
   --member "serviceAccount:${DEPLOYER_EMAIL}" \
   --role roles/iam.serviceAccountUser \
-  --project "${PROJECT}" >/dev/null
+  --project "${PROJECT}"
 
 echo "==> Workload identity pool"
 gcloud iam workload-identity-pools describe "${POOL}" \
@@ -80,10 +99,10 @@ fi
 echo "==> Binding the repository to the deploy account"
 # Narrowed to this one repository — not the whole owner. Any other repo under
 # the same owner still cannot impersonate this account.
-gcloud iam service-accounts add-iam-policy-binding "${DEPLOYER_EMAIL}" \
+retry_iam gcloud iam service-accounts add-iam-policy-binding "${DEPLOYER_EMAIL}" \
   --role=roles/iam.workloadIdentityUser \
   --member="principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL}/attribute.repository/${GITHUB_OWNER}/${GITHUB_REPO}" \
-  --project "${PROJECT}" >/dev/null
+  --project "${PROJECT}"
 
 PROVIDER_PATH="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${POOL}/providers/${PROVIDER}"
 

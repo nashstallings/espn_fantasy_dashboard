@@ -129,7 +129,16 @@ async def _value_error(_: Request, exc: ValueError) -> JSONResponse:
 
 
 @app.get("/healthz")
+@app.get("/api/healthz")
 async def healthz() -> dict[str, str]:
+    """Liveness check, served on two paths.
+
+    ``/healthz`` is the conventional one, but on Cloud Run it was answered by
+    Google's frontend with a 404 that never reached this app, while sibling
+    routes under ``/api/`` served normally. Rather than depend on a path
+    something upstream may intercept, the deploy workflow polls ``/api/healthz``;
+    the bare path stays for anything already pointed at it.
+    """
     return {"status": "ok"}
 
 

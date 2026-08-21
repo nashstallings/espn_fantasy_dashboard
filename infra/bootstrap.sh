@@ -15,6 +15,25 @@ SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-espn-dashboard-api}"
 SA_EMAIL="${SERVICE_ACCOUNT}@${PROJECT}.iam.gserviceaccount.com"
 SCHEMA_DIR="$(dirname "$0")/bigquery/schemas"
 
+# A service account is not immediately visible to the IAM policy service after
+# it is created — binding a role to it seconds later fails with
+# "Service account ... does not exist". That is propagation lag, not a real
+# error, and it is the single most common way these scripts fall over.
+#
+# Retry with backoff, swallowing output until the last attempt so a genuine
+# failure still surfaces its real message.
+retry_iam () {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if "$@" >/dev/null 2>&1; then
+      return 0
+    fi
+    echo "    IAM not settled yet, retrying in $((attempt * 5))s..."
+    sleep $((attempt * 5))
+  done
+  "$@"  # final attempt, unsuppressed, so the real error is visible
+}
+
 echo "==> Checking billing"
 # Cloud Run, BigQuery, and Secret Manager all need an active billing account.
 # Without this check the run dies partway through on a raw API error, leaving
@@ -42,8 +61,8 @@ gcloud iam service-accounts describe "${SA_EMAIL}" --project "${PROJECT}" >/dev/
     --display-name "ESPN Fantasy Dashboard API" --project "${PROJECT}"
 
 for ROLE in roles/datastore.user roles/bigquery.dataEditor roles/bigquery.jobUser; do
-  gcloud projects add-iam-policy-binding "${PROJECT}" \
-    --member "serviceAccount:${SA_EMAIL}" --role "${ROLE}" --condition=None >/dev/null
+  retry_iam gcloud projects add-iam-policy-binding "${PROJECT}" \
+    --member "serviceAccount:${SA_EMAIL}" --role "${ROLE}" --condition=None
 done
 
 echo "==> Firestore (native mode) for encrypted credentials"
@@ -60,9 +79,9 @@ create_secret () {
   fi
   gcloud secrets create "${NAME}" --replication-policy=automatic --project "${PROJECT}"
   printf '%s' "${VALUE}" | gcloud secrets versions add "${NAME}" --data-file=- --project "${PROJECT}"
-  gcloud secrets add-iam-policy-binding "${NAME}" \
+  retry_iam gcloud secrets add-iam-policy-binding "${NAME}" \
     --member "serviceAccount:${SA_EMAIL}" --role roles/secretmanager.secretAccessor \
-    --project "${PROJECT}" >/dev/null
+    --project "${PROJECT}"
 }
 
 create_secret espn-credential-key "$(python3 -c 'import os,base64;print(base64.b64encode(os.urandom(32)).decode())')"

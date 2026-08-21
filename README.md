@@ -148,11 +148,12 @@ app actually boots.
 
 ## API
 
-All routes except `/healthz`, `/api/season`, and `/api/connect` require
+All routes except `/healthz`, `/api/healthz`, `/api/season`, and `/api/connect` require
 `Authorization: Bearer <token>`.
 
 | Method | Path | |
 | --- | --- | --- |
+| `GET` | `/api/healthz` | Liveness check — what the deploy workflow polls |
 | `POST` | `/api/connect` | Validate cookies, link leagues, return a session token |
 | `GET` | `/api/me` | SWID, linked leagues, connection timestamps |
 | `POST` | `/api/me/leagues` | Link a league by ID |
