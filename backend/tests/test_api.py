@@ -38,8 +38,12 @@ def connect(client, **overrides):
 # --- health ------------------------------------------------------------------
 
 
-def test_healthz(client):
-    assert client.get("/healthz").json() == {"status": "ok"}
+@pytest.mark.parametrize("path", ["/healthz", "/api/healthz"])
+def test_health_check_served_on_both_paths(client, path):
+    """The deploy workflow polls /api/healthz; /healthz stays for anything else."""
+    response = client.get(path)
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
 
 # --- connect -----------------------------------------------------------------

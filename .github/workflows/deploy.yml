@@ -61,13 +61,13 @@ jobs:
           # A green deploy step only means Cloud Run accepted the revision; this
           # is what proves the app actually boots and answers.
           for attempt in 1 2 3 4 5; do
-            CODE="$(curl -s -o /dev/null -w '%{http_code}' "$URL/healthz" || true)"
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' "$URL/api/healthz" || true)"
             if [ "$CODE" = "200" ]; then
-              echo "healthz OK"
+              echo "health check OK"
               exit 0
             fi
-            echo "attempt $attempt: healthz returned $CODE, retrying..."
+            echo "attempt $attempt: /api/healthz returned $CODE, retrying..."
             sleep 5
           done
-          echo "::error::Deployed revision never returned 200 from /healthz"
+          echo "::error::Deployed revision never returned 200 from /api/healthz"
           exit 1
