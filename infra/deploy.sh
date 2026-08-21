@@ -2,7 +2,7 @@
 # Build and deploy the API to Cloud Run, then (re)point Cloud Scheduler at it.
 set -euo pipefail
 
-PROJECT="${PROJECT:?set PROJECT to your GCP project id}"
+PROJECT="${PROJECT:-ff-python-api}"
 REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-espn-dashboard-api}"
 DATASET="${DATASET:-espn_fantasy}"

@@ -3,12 +3,28 @@
 # Safe to re-run — every step is idempotent.
 set -euo pipefail
 
-PROJECT="${PROJECT:?set PROJECT to your GCP project id}"
+PROJECT="${PROJECT:-ff-python-api}"
 REGION="${REGION:-us-central1}"
 DATASET="${DATASET:-espn_fantasy}"
+# BigQuery dataset location. Kept separate from REGION and defaulted to the US
+# multi-region so this dataset matches the others already in this project —
+# BigQuery cannot join across locations, and a lone us-central1 dataset would be
+# permanently unjoinable to them.
+BQ_LOCATION="${BQ_LOCATION:-US}"
 SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-espn-dashboard-api}"
 SA_EMAIL="${SERVICE_ACCOUNT}@${PROJECT}.iam.gserviceaccount.com"
 SCHEMA_DIR="$(dirname "$0")/bigquery/schemas"
+
+echo "==> Checking billing"
+# Cloud Run, BigQuery, and Secret Manager all need an active billing account.
+# Without this check the run dies partway through on a raw API error, leaving
+# the project half-provisioned.
+if ! gcloud billing projects describe "${PROJECT}" --format='value(billingEnabled)' 2>/dev/null | grep -qi true; then
+  echo "ERROR: billing is not enabled on ${PROJECT}." >&2
+  echo "  gcloud billing accounts list" >&2
+  echo "  gcloud billing projects link ${PROJECT} --billing-account=XXXXXX-XXXXXX" >&2
+  exit 1
+fi
 
 echo "==> Enabling APIs"
 gcloud services enable \
@@ -55,7 +71,7 @@ create_secret espn-sync-token "$(python3 -c 'import secrets;print(secrets.token_
 
 echo "==> BigQuery dataset and tables"
 bq --project_id="${PROJECT}" show "${DATASET}" >/dev/null 2>&1 || \
-  bq --project_id="${PROJECT}" --location="${REGION}" mk --dataset \
+  bq --project_id="${PROJECT}" --location="${BQ_LOCATION}" mk --dataset \
     --description "ESPN fantasy football league history" "${DATASET}"
 
 for TABLE in leagues team_week matchups power_rankings; do

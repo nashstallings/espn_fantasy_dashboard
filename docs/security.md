@@ -56,6 +56,31 @@ rotation if that becomes worth building.
 - Logging out of ESPN invalidates `espn_s2` upstream, which makes the stored
   copy useless regardless of what this app does.
 
+## Shared project
+
+This app runs in `ff-python-api`, alongside Dynasty Tycoon, rather than in a
+project of its own. That is a deliberate choice, and it is the one place where
+the blast radius around stored ESPN cookies is wider than it has to be: anything
+with broad project-level IAM there — an owner/editor role, or a service account
+granted `roles/datastore.user` for another workload — can read the credential
+documents, even though nothing in Dynasty Tycoon has a reason to.
+
+What keeps that bounded:
+
+- The dashboard's own service account (`espn-dashboard-api`) is created fresh by
+  `bootstrap.sh` and granted only `datastore.user`, `bigquery.dataEditor`, and
+  `bigquery.jobUser`.
+- Credentials live in their own Firestore collection (`espn_credentials`), and
+  the BigQuery snapshots go to their own dataset (`espn_fantasy`) — no shared
+  tables with the Dynasty datasets.
+- `espn_s2` is encrypted regardless, and the key lives in Secret Manager with
+  access granted only to this service account. Project-level Firestore read
+  access alone yields ciphertext, not cookies.
+
+Moving to a dedicated project later means re-running `bootstrap.sh` with a
+different `PROJECT` and re-connecting accounts; nothing in the code assumes the
+project it sits in.
+
 ## Known limits
 
 - A session token stays valid for its full TTL (default 30 days). There is no
