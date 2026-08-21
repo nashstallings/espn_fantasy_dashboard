@@ -1,0 +1,73 @@
+name: Deploy backend to Cloud Run
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "infra/deploy.sh"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+# Never let two deploys race to the same Cloud Run service. Unlike the Pages
+# workflow, cancelling a superseded deploy is right: only the newest commit
+# should end up live.
+concurrency:
+  group: deploy-cloud-run
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # Stay inert until the Workload Identity variables exist, so pushes don't
+    # fail for anyone who hasn't run infra/setup-github-oidc.sh yet.
+    if: vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' && vars.GCP_DEPLOY_SERVICE_ACCOUNT != ''
+
+    permissions:
+      contents: read
+      id-token: write # required to mint the OIDC token GCP exchanges
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Exchanges GitHub's OIDC token for short-lived Google credentials.
+      # No service account key exists to leak.
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT || 'ff-python-api' }}
+          REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+          # The daily snapshot job is managed by the human-run deploy. Leaving
+          # it out is what keeps Secret Manager access off the CI account.
+          MANAGE_SCHEDULER: "false"
+        run: ./infra/deploy.sh
+
+      - name: Verify the deployed revision is serving
+        env:
+          PROJECT: ${{ vars.GCP_PROJECT || 'ff-python-api' }}
+          REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+        run: |
+          URL="$(gcloud run services describe espn-dashboard-api \
+            --region "$REGION" --project "$PROJECT" --format 'value(status.url)')"
+          echo "Service URL: $URL"
+          # A green deploy step only means Cloud Run accepted the revision; this
+          # is what proves the app actually boots and answers.
+          for attempt in 1 2 3 4 5; do
+            CODE="$(curl -s -o /dev/null -w '%{http_code}' "$URL/healthz" || true)"
+            if [ "$CODE" = "200" ]; then
+              echo "healthz OK"
+              exit 0
+            fi
+            echo "attempt $attempt: healthz returned $CODE, retrying..."
+            sleep 5
+          done
+          echo "::error::Deployed revision never returned 200 from /healthz"
+          exit 1

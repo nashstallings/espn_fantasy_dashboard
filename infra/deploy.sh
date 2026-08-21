@@ -10,6 +10,11 @@ SERVICE_ACCOUNT="${SERVICE_ACCOUNT:-espn-dashboard-api}"
 SA_EMAIL="${SERVICE_ACCOUNT}@${PROJECT}.iam.gserviceaccount.com"
 # The GitHub Pages origin(s) allowed to call this API.
 ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://nashstallings.github.io}"
+# Scheduler management reads the sync token out of Secret Manager. CI sets this
+# to false so the deploy service account never needs secret access — the daily
+# job is infrastructure that changes far less often than the code, so it stays
+# with the human-run path.
+MANAGE_SCHEDULER="${MANAGE_SCHEDULER:-true}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "==> Deploying ${SERVICE} to ${REGION}"
@@ -28,6 +33,12 @@ gcloud run deploy "${SERVICE}" \
 
 URL="$(gcloud run services describe "${SERVICE}" --region "${REGION}" --project "${PROJECT}" --format 'value(status.url)')"
 echo "==> Service URL: ${URL}"
+
+if [ "${MANAGE_SCHEDULER}" != "true" ]; then
+  echo "==> Skipping Cloud Scheduler (MANAGE_SCHEDULER=${MANAGE_SCHEDULER})"
+  echo "==> Done."
+  exit 0
+fi
 
 echo "==> Cloud Scheduler daily snapshot"
 SYNC_TOKEN="$(gcloud secrets versions access latest --secret espn-sync-token --project "${PROJECT}")"

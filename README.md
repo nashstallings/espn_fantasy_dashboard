@@ -91,9 +91,17 @@ cd backend && ruff check . && pytest -q
 
 ## Deploy
 
+Everything below runs in [Cloud Shell](https://shell.cloud.google.com) — a
+browser terminal with `gcloud`, `bq`, and `python3` preinstalled and already
+authenticated. Nothing needs to be installed locally.
+
 ```bash
-./infra/bootstrap.sh   # APIs, service account, Firestore, secrets, BigQuery tables
-./infra/deploy.sh      # Cloud Run + the daily snapshot schedule
+git clone https://github.com/nashstallings/espn_fantasy_dashboard.git
+cd espn_fantasy_dashboard
+
+./infra/bootstrap.sh          # APIs, service account, Firestore, secrets, BigQuery tables
+./infra/deploy.sh             # Cloud Run + the daily snapshot schedule
+./infra/setup-github-oidc.sh  # optional: let GitHub Actions deploy from then on
 ```
 
 Both scripts default to the `ff-python-api` project, which this app shares with
@@ -105,9 +113,38 @@ The BigQuery dataset is created in the `US` multi-region (`BQ_LOCATION`) to matc
 the other datasets in that project — BigQuery can't join across locations, so a
 lone `us-central1` dataset would be permanently unjoinable to them.
 
-`bootstrap.sh` generates the encryption key, JWT secret, and sync token into
-Secret Manager — they are never in the repo. Then put the Cloud Run URL into
-`frontend/config.js`, commit, and the Pages workflow publishes the site.
+Finally, put the printed Cloud Run URL into `frontend/config.js` as `API_BASE`
+and commit. The Pages workflow republishes the site on its own.
+
+### Deploying from GitHub Actions
+
+`setup-github-oidc.sh` wires up Workload Identity Federation so
+`.github/workflows/deploy.yml` can deploy on every push to `main` that touches
+`backend/`. GitHub's OIDC token is exchanged for short-lived Google credentials
+at run time — no service account key is ever stored in the repository.
+
+It prints two values to paste into
+**Settings → Secrets and variables → Actions → Variables**:
+
+| Variable | Value |
+| --- | --- |
+| `GCP_WORKLOAD_IDENTITY_PROVIDER` | `projects/<number>/locations/global/workloadIdentityPools/github/providers/github-actions` |
+| `GCP_DEPLOY_SERVICE_ACCOUNT` | `github-deployer@ff-python-api.iam.gserviceaccount.com` |
+
+The workflow is inert until both exist, so pushes won't fail before you set
+them. Two deliberate limits on what CI can do:
+
+* The deploy account has **no Secret Manager access**. The workflow runs
+  `deploy.sh` with `MANAGE_SCHEDULER=false`, so it never reads the sync token;
+  the daily snapshot job stays with the human-run path, where it belongs — it
+  changes far less often than the code does.
+* The OIDC provider carries an attribute condition pinning it to this owner, and
+  the account binding is narrowed to this one repository. Another repo, even
+  under the same owner, cannot impersonate the deployer.
+
+After deploying, the workflow polls `/healthz` until it answers 200. A green
+Cloud Run deploy only means the revision was accepted; this is what proves the
+app actually boots.
 
 ## API
 
