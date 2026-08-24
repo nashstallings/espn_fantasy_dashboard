@@ -192,7 +192,14 @@ def credentials_from_env() -> ESPNCredentials:
 
         espn_s2 = unquote(espn_s2)
     if not swid or not espn_s2:
-        raise BuildError("ESPN_SWID and ESPN_S2 must both be set")
+        missing = ", ".join(
+            name for name, value in (("ESPN_SWID", swid), ("ESPN_S2", espn_s2)) if not value
+        )
+        raise BuildError(
+            f"{missing} not set. In GitHub: Settings -> Secrets and variables -> "
+            "Actions -> Secrets -> New repository secret. Both come from your "
+            "logged-in ESPN session (DevTools -> Application -> Cookies)."
+        )
     return ESPNCredentials(swid=swid, espn_s2=espn_s2)
 
 
@@ -201,7 +208,11 @@ def main() -> int:
 
     league_id = os.environ.get("LEAGUE_ID", "").strip()
     if not league_id:
-        raise BuildError("LEAGUE_ID must be set")
+        raise BuildError(
+            "LEAGUE_ID is not set. In GitHub: Settings -> Secrets and variables "
+            "-> Actions -> Variables -> New repository variable, named LEAGUE_ID, "
+            "set to the number in your ESPN league URL (...leagueId=123456)."
+        )
     season = int(os.environ.get("SEASON") or current_season())
     out_dir = Path(os.environ.get("OUTPUT_DIR", "frontend/data"))
 
