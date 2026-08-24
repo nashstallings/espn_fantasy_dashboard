@@ -32,6 +32,7 @@ and nothing to pay for.
 | `backend/tests/` | pytest suite — 175 tests, no network. |
 | `.github/workflows/site.yml` | The scheduled build. This is what runs the whole thing. |
 | `infra/` | GCP bootstrap and deploy scripts, BigQuery table schemas. |
+| `analysis/` | 2025 fantasy scoring by player and by NFL team — see [`analysis/README.md`](analysis/README.md). |
 | `docs/` | Architecture and security notes. |
 
 ## Setting it up

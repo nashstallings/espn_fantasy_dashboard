@@ -30,3 +30,7 @@ frontend/data/
 
 # Node (frontend has no build step today; keep this for future tooling)
 node_modules/
+
+# Downloaded nflverse source data for analysis/. Regenerated on demand and
+# large enough that it does not belong in git; the derived CSVs are committed.
+analysis/.cache/
