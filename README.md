@@ -146,6 +146,26 @@ After deploying, the workflow polls `/healthz` until it answers 200. A green
 Cloud Run deploy only means the revision was accepted; this is what proves the
 app actually boots.
 
+## Publishing one league
+
+By default every viewer connects their own ESPN cookies. Setting
+`PUBLIC_LEAGUE_ID` instead publishes a single league read-only — anyone with the
+site URL sees standings, rosters, matchups, and transactions with no cookies, no
+account, and no DevTools:
+
+```bash
+PUBLIC_LEAGUE_ID=123456 PUBLIC_LEAGUE_SEASON=2026 ./infra/deploy.sh
+```
+
+Someone in that league still has to connect once; the public view borrows their
+credentials server-side to fetch from ESPN. Visitors get the dashboard
+immediately, with an optional "Connect your ESPN account" for a personal view.
+
+This makes a private league's data readable by anyone who has the link. Off
+unless set, reversible by clearing the variable, and
+[`docs/security.md`](docs/security.md) spells out exactly what is and is not
+exposed.
+
 ## API
 
 All routes except `/healthz`, `/api/healthz`, `/api/season`, and `/api/connect` require
@@ -154,6 +174,8 @@ All routes except `/healthz`, `/api/healthz`, `/api/season`, and `/api/connect` 
 | Method | Path | |
 | --- | --- | --- |
 | `GET` | `/api/healthz` | Liveness check — what the deploy workflow polls |
+| `GET` | `/api/public/config` | Whether a league is published, and which |
+| `GET` | `/api/public/*` | Read-only views of the published league; no auth, no league id |
 | `POST` | `/api/connect` | Validate cookies, link leagues, return a session token |
 | `GET` | `/api/me` | SWID, linked leagues, connection timestamps |
 | `POST` | `/api/me/leagues` | Link a league by ID |

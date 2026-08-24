@@ -106,6 +106,22 @@ async def connected(service) -> DashboardService:
     return service
 
 
+@pytest.fixture
+def client(settings, service):
+    """TestClient wired to the in-memory service and test settings."""
+    from fastapi.testclient import TestClient
+
+    from espn_dashboard import main
+
+    main.set_service(service)
+    main.app.dependency_overrides[get_settings] = lambda: settings
+    with TestClient(main.app) as test_client:
+        test_client.settings = settings
+        yield test_client
+    main.app.dependency_overrides.clear()
+    main.set_service(None)
+
+
 @pytest.fixture(autouse=True)
 def _reset_settings_cache():
     get_settings.cache_clear()

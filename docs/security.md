@@ -125,6 +125,41 @@ because gcloud echoes the job's full configuration, header values included. Any
 future change to that block must keep it quiet — a credential printed once lives
 in scrollback and screenshots indefinitely.
 
+## Publishing a league
+
+Setting `PUBLIC_LEAGUE_ID` turns on unauthenticated read-only access to that one
+league. Anyone with the site URL sees its standings, rosters, matchups, and
+transaction history — no ESPN cookies, no account, no link token. This is a
+deliberate trade of privacy for convenience: twelve managers each fighting with
+DevTools becomes one person connecting and everyone else clicking a link.
+
+Be clear about what it exposes. A private ESPN league is private because ESPN
+requires credentials to read it. Publishing it here removes that requirement for
+this copy of the data. Everything a league member could see on ESPN, anyone with
+the URL can now see here.
+
+What it does **not** expose, and what enforces that:
+
+* **No credentials.** The public routes borrow a connected member's cookies
+  server-side. No response carries `espn_s2`, the SWID of the borrowing account,
+  or any session token — asserted in `test_public_responses_never_carry_credential_material`.
+* **No other leagues.** The public routes take no league identifier at all; the
+  league comes from configuration. There is no parameter to tamper with, so a
+  visitor cannot walk from the published league to a private one.
+* **No write access.** Every public route is a GET returning normalized read
+  data. Connect, disconnect, and league linking all still require a session
+  token, which `test_authenticated_routes_are_unaffected_by_public_mode` checks.
+* **Off by default.** `PUBLIC_LEAGUE_ID` is empty unless explicitly set, so
+  nothing is published by accident.
+* **Not indexed.** Responses carry `X-Robots-Tag: noindex, nofollow`. This does
+  not restrict access — anyone with the link still gets in — it only keeps a
+  private league out of search results. Set `PUBLIC_LEAGUE_NOINDEX=false` to
+  allow indexing.
+
+The public view depends on a connected member: it borrows their cookies, so it
+returns a clear error if that account disconnects or its cookies expire. To stop
+publishing, clear `PUBLIC_LEAGUE_ID` and redeploy.
+
 ## Known limits
 
 - A session token stays valid for its full TTL (default 30 days). There is no

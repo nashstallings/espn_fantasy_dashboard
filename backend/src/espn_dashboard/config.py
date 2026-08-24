@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     firestore_collection: str = "espn_credentials"
     bigquery_dataset: str = "espn_fantasy"
 
+    # Public league -----------------------------------------------------------
+    # Setting public_league_id turns on unauthenticated read-only access to that
+    # one league: anyone with the URL sees it, no ESPN cookies required. Empty by
+    # default, so nothing is ever published by accident.
+    public_league_id: str = ""
+    public_league_season: int = 0
+    # Keep the public page out of search results. Does not restrict access —
+    # anyone with the link still gets in — it only stops indexing.
+    public_league_noindex: bool = True
+
     # Behaviour ---------------------------------------------------------------
     allowed_origins: str = "http://localhost:8080"
     espn_cache_ttl_seconds: int = 60

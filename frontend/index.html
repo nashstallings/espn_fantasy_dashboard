@@ -31,8 +31,19 @@
             Refresh
           </button>
           <button id="account" class="button button--ghost" type="button">Account</button>
+          <button id="sign-in" class="button button--ghost" type="button" hidden>
+            Connect your account
+          </button>
         </div>
       </header>
+
+      <div id="public-banner" class="banner" hidden>
+        <span class="banner__dot" aria-hidden="true"></span>
+        <span id="public-banner-text">Public view — read only.</span>
+        <button id="banner-connect" class="banner__link" type="button">
+          Connect your ESPN account
+        </button>
+      </div>
 
       <nav class="tabs" id="tabs" role="tablist">
         <button class="tab" role="tab" data-view="overview">Overview</button>
@@ -95,6 +106,9 @@
           </label>
 
           <button id="connect-submit" class="button button--primary" type="submit">Connect</button>
+          <button id="connect-cancel" class="button button--ghost" type="button" hidden>
+            Back to the public dashboard
+          </button>
           <p id="connect-status" class="status" role="status"></p>
         </form>
 
