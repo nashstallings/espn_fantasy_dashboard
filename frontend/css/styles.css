@@ -109,6 +109,15 @@ body {
   flex: none;
 }
 
+.banner--quiet {
+  background: transparent;
+  border-style: dashed;
+  font-size: 13px;
+}
+
+.banner__dot--idle { background: var(--text-muted); }
+.banner__dot--stale { background: var(--accent); }
+
 .banner__link {
   appearance: none;
   background: none;

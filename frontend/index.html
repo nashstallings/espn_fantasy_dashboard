@@ -45,6 +45,13 @@
         </button>
       </div>
 
+      <!-- Static builds are only as fresh as the last run, so the page says
+           so rather than letting stale numbers pass for live ones. -->
+      <div id="freshness" class="banner banner--quiet" hidden>
+        <span class="banner__dot banner__dot--idle" aria-hidden="true"></span>
+        <span id="freshness-text"></span>
+      </div>
+
       <nav class="tabs" id="tabs" role="tablist">
         <button class="tab" role="tab" data-view="overview">Overview</button>
         <button class="tab" role="tab" data-view="standings">Standings</button>
