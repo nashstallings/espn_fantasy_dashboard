@@ -1,6 +1,7 @@
 // Application controller: boot, routing between tabs, and the connect flow.
 
 import { ApiError, api } from "./api.js";
+import { DataError, staticData } from "./static-data.js";
 import { clear, el, empty } from "./dom.js";
 import {
   clearToken,
@@ -37,6 +38,8 @@ const dom = {
   disconnect: document.getElementById("disconnect"),
   // The wrapping label, so hiding the switcher hides its caption too.
   leagueField: document.getElementById("league-select").closest(".field"),
+  freshness: document.getElementById("freshness"),
+  freshnessText: document.getElementById("freshness-text"),
   publicBanner: document.getElementById("public-banner"),
   publicBannerText: document.getElementById("public-banner-text"),
   bannerConnect: document.getElementById("banner-connect"),
@@ -56,6 +59,9 @@ const state = {
   // and only adds the account controls.
   isPublic: false,
   publicAvailable: false,
+  // Static mode: the site is a build artifact with no API behind it. Detected
+  // by the presence of data/index.json, so the same frontend serves both.
+  isStatic: false,
   // Bumped on every load; a slow response for a league you already switched
   // away from is discarded rather than painted over the new one.
   requestId: 0,
@@ -64,6 +70,20 @@ const state = {
 // --- boot --------------------------------------------------------------------
 
 async function boot() {
+  // A static build ships its own data. Check for it first: if it is there, no
+  // API exists to talk to and there is nothing to connect.
+  try {
+    const manifest = await staticData.index();
+    state.isStatic = true;
+    return showStaticDashboard(manifest);
+  } catch (error) {
+    if (!(error instanceof DataError) || !error.missing) {
+      // A real failure here (bad JSON, server error) is worth surfacing rather
+      // than silently falling through to the API path.
+      if (error instanceof DataError) console.warn(error.message);
+    }
+  }
+
   // Ask about public viewing first: if a league is published, a visitor with no
   // credentials should land on the dashboard, not a form asking for cookies.
   try {
@@ -90,6 +110,43 @@ async function boot() {
 
   if (state.publicAvailable) return showPublicDashboard();
   showConnect();
+}
+
+function showStaticDashboard(manifest) {
+  state.isPublic = true;
+  state.account = null;
+  state.league = null;
+  dom.connect.hidden = true;
+  dom.app.hidden = false;
+  dom.leagueField.hidden = true;
+  dom.accountButton.hidden = true;
+  // Nothing to sign in to: a static build has no API to authenticate against.
+  dom.signIn.hidden = true;
+  dom.publicBanner.hidden = true;
+  showFreshness(manifest);
+  renderTabs();
+  loadView();
+}
+
+function showFreshness(payload) {
+  const stamp = payload?.generated_at;
+  if (!stamp) return;
+  const built = new Date(stamp);
+  if (Number.isNaN(built.getTime())) return;
+
+  const minutes = Math.max(0, Math.round((Date.now() - built.getTime()) / 60000));
+  const age =
+    minutes < 1 ? "just now"
+    : minutes < 60 ? `${minutes} min ago`
+    : minutes < 1440 ? `${Math.round(minutes / 60)} hr ago`
+    : `${Math.round(minutes / 1440)} days ago`;
+
+  dom.freshness.hidden = false;
+  dom.freshnessText.textContent = `Data as of ${built.toLocaleString()} · updated ${age}`;
+  // Past a couple of build intervals, say so louder — during games this is the
+  // difference between trusting the numbers and refreshing ESPN instead.
+  dom.freshness.querySelector(".banner__dot").className =
+    minutes > 45 ? "banner__dot banner__dot--stale" : "banner__dot banner__dot--idle";
 }
 
 function showPublicDashboard() {
@@ -232,7 +289,12 @@ dom.tabs.addEventListener("click", (event) => {
   loadView();
 });
 
-dom.refresh.addEventListener("click", () => loadView());
+dom.refresh.addEventListener("click", () => {
+  // A static build cannot re-query ESPN on demand — the freshest thing
+  // available is whatever the last scheduled build produced.
+  if (state.isStatic) return window.location.reload();
+  loadView();
+});
 
 for (const button of [dom.signIn, dom.bannerConnect]) {
   button.addEventListener("click", () => {
@@ -253,6 +315,7 @@ dom.connectCancel.addEventListener("click", () => {
 async function loadView() {
   renderTabs();
 
+  if (state.isStatic) return loadStaticView();
   if (state.isPublic) return loadPublicView();
 
   if (!state.league) {
@@ -277,6 +340,72 @@ async function loadView() {
       return showConnect(describe(error));
     }
     clear(dom.view).append(errorCard(error));
+  }
+}
+
+async function loadStaticView() {
+  const requestId = ++state.requestId;
+  clear(dom.view).append(empty("Loading…"));
+  try {
+    const node = await buildStaticView();
+    if (requestId !== state.requestId) return;
+    clear(dom.view).append(node);
+  } catch (error) {
+    if (requestId !== state.requestId) return;
+    clear(dom.view).append(errorCard(error));
+  }
+}
+
+async function buildStaticView() {
+  switch (state.view) {
+    case "standings":
+      return renderStandings(await staticData.standings());
+
+    case "matchups": {
+      const data = await staticData.matchups(state.week ?? undefined);
+      state.week = data.week;
+      setPublicLeagueName(data.league);
+      return renderMatchups(data, {
+        onWeekChange: (week) => {
+          state.week = week;
+          loadView();
+        },
+      });
+    }
+
+    case "rosters": {
+      if (!state.teams.length) state.teams = (await staticData.teams()).teams || [];
+      if (!state.teams.length) return empty("This league has no teams yet.");
+      if (!state.teams.some((team) => team.team_id === state.teamId)) {
+        state.teamId = state.teams[0].team_id;
+      }
+      const data = await staticData.roster(state.teamId, state.week ?? undefined);
+      state.week = data.week;
+      return renderRosters(data, {
+        teams: state.teams,
+        selectedTeamId: state.teamId,
+        onTeamChange: (teamId) => {
+          state.teamId = teamId;
+          loadView();
+        },
+        onWeekChange: (week) => {
+          state.week = week;
+          loadView();
+        },
+      });
+    }
+
+    case "transactions":
+      return renderTransactions(await staticData.transactions());
+
+    case "power":
+      return renderPowerRankings(await staticData.powerRankings());
+
+    default: {
+      const data = await staticData.overview();
+      setPublicLeagueName(data.league);
+      return renderOverview(data);
+    }
   }
 }
 
@@ -350,7 +479,9 @@ function setPublicLeagueName(league) {
   const name = league?.name;
   if (!name) return;
   dom.publicBannerText.textContent = `${name} · public view, read only.`;
-  dom.footerNote.textContent = `${name} · season ${league.season} · live from ESPN`;
+  dom.footerNote.textContent = state.isStatic
+    ? `${name} · season ${league.season}`
+    : `${name} · season ${league.season} · live from ESPN`;
 }
 
 async function buildView(leagueId, season) {
@@ -480,6 +611,7 @@ function setStatus(node, message, kind) {
 }
 
 function describe(error) {
+  if (error instanceof DataError) return error.message;
   if (error instanceof ApiError) {
     if (error.code === "ESPNAuthError") {
       return "ESPN rejected the stored cookies. They expire when you log out of ESPN — reconnect with fresh values.";

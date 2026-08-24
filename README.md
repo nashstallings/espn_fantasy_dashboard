@@ -4,28 +4,72 @@ A dashboard for your own ESPN fantasy football leagues — standings, matchups,
 rosters, transactions, and power rankings — for any league you're in, including
 private ones.
 
-There is no signup. ESPN publishes no OAuth flow for third-party apps, so you
-connect by pasting the two session cookies your browser already holds
-(`SWID` and `espn_s2`). Those are validated against ESPN, encrypted, and stored
-server-side; your browser gets back a signed session token so you only do it
-once.
+ESPN publishes no OAuth flow for third-party apps, so the data is fetched with
+the two session cookies from a logged-in ESPN account. Those live in GitHub
+Actions secrets, are used only inside the build, and never reach the published
+site — the build refuses to publish if any of it leaks into the output.
 
 ```
-GitHub Pages (static)  ──►  Cloud Run (FastAPI)  ──►  ESPN Fantasy API
-                                   │
-                                   ├──►  Firestore   (encrypted cookies, league list)
-                                   └──►  BigQuery    (daily snapshots for history/trends)
+GitHub Actions (every 15 min)  ──►  ESPN Fantasy API
+        │
+        ├──►  data/*.json  ──►  GitHub Pages   (the site)
+        └──►  BigQuery                          (season history)
 ```
+
+The site is a build artifact. A scheduled workflow fetches your league, writes
+JSON, and publishes it to Pages — there is no server, nothing to keep running,
+and nothing to pay for.
 
 ## Layout
 
 | Path | What's in it |
 | --- | --- |
-| `frontend/` | The static site: connect form, league switcher, dashboard views. No build step. |
-| `backend/src/espn_dashboard/` | FastAPI app, ESPN client, normalization, power rankings, BigQuery sync. |
-| `backend/tests/` | pytest suite — 129 tests, no network. |
+| `frontend/` | The site: dashboard views, no build step and no framework. |
+| `backend/src/espn_dashboard/build_site.py` | Fetches ESPN and writes the JSON the site reads. |
+| `backend/src/espn_dashboard/snapshot_league.py` | Writes the daily BigQuery snapshot. |
+| `backend/src/espn_dashboard/espn/` | ESPN client and the defensive transforms. |
+| `backend/src/espn_dashboard/analytics.py` | Power rankings. |
+| `backend/tests/` | pytest suite — 175 tests, no network. |
+| `.github/workflows/site.yml` | The scheduled build. This is what runs the whole thing. |
 | `infra/` | GCP bootstrap and deploy scripts, BigQuery table schemas. |
 | `docs/` | Architecture and security notes. |
+
+## Setting it up
+
+Two repository **secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Where to get it |
+| --- | --- |
+| `ESPN_SWID` | DevTools → Application → Cookies → `fantasy.espn.com` |
+| `ESPN_S2` | Same place. Percent-encoded values are decoded automatically. |
+
+And two **variables** in the same place:
+
+| Variable | Value |
+| --- | --- |
+| `LEAGUE_ID` | The number in your ESPN league URL |
+| `SEASON` | e.g. `2026` (optional; defaults to the current season) |
+
+Then run **Build and publish the dashboard** from the Actions tab, or wait for
+the next scheduled run. That is the whole setup.
+
+## Freshness
+
+The workflow runs every 15 minutes, and **the site is only as fresh as the last
+build**. GitHub treats scheduled runs as best-effort and delays them under load —
+especially at the top of the hour — so during Sunday scoring expect data to be
+15–40 minutes old. The page states its own age (*"Data as of 3:42 PM · updated
+12 min ago"*) and marks itself stale past 45 minutes, so nobody mistakes an old
+number for a live one. **Refresh** reloads the newest published build;
+`workflow_dispatch` forces a fresh one.
+
+## The server path (optional)
+
+A FastAPI backend for Cloud Run is still in `backend/` — it serves the same data
+live on request, supports multiple leagues, and lets each viewer connect their
+own ESPN account. It is no longer needed for the published site. See
+[`infra/deploy.sh`](infra/deploy.sh) if you want live-on-load data instead of
+scheduled builds.
 
 ## How the connect flow works
 
