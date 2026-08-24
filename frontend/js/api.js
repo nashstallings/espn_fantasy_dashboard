@@ -74,6 +74,19 @@ function describeStatus(status) {
 }
 
 export const api = {
+  // Public (read-only, no credentials). These take no league id — the backend
+  // pins them to the one published league.
+  publicConfig: () => request("/api/public/config", { auth: false }),
+  publicOverview: () => request("/api/public/overview", { auth: false }),
+  publicStandings: () => request("/api/public/standings", { auth: false }),
+  publicMatchups: (week) => request(publicUrl("matchups", { week }), { auth: false }),
+  publicTeams: () => request("/api/public/teams", { auth: false }),
+  publicRoster: (teamId, week) =>
+    request(publicUrl(`teams/${teamId}/roster`, { week }), { auth: false }),
+  publicTransactions: (limit = 100) =>
+    request(publicUrl("transactions", { limit }), { auth: false }),
+  publicPowerRankings: () => request("/api/public/power-rankings", { auth: false }),
+
   connect: (payload) => request("/api/connect", { method: "POST", body: payload, auth: false }),
   me: () => request("/api/me"),
   season: () => request("/api/season", { auth: false }),
@@ -94,11 +107,19 @@ export const api = {
   powerRankings: (leagueId, season) => request(leagueUrl(leagueId, "power-rankings", { season })),
 };
 
-function leagueUrl(leagueId, path, params = {}) {
+function publicUrl(path, params = {}) {
+  return `/api/public/${path}${queryString(params)}`;
+}
+
+function queryString(params) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== "") query.set(key, value);
   }
   const suffix = query.toString();
-  return `/api/leagues/${encodeURIComponent(leagueId)}/${path}${suffix ? `?${suffix}` : ""}`;
+  return suffix ? `?${suffix}` : "";
+}
+
+function leagueUrl(leagueId, path, params = {}) {
+  return `/api/leagues/${encodeURIComponent(leagueId)}/${path}${queryString(params)}`;
 }

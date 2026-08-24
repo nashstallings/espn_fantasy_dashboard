@@ -3,26 +3,12 @@
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 
-from espn_dashboard import main
 from espn_dashboard.auth import issue_token
-from espn_dashboard.config import get_settings
 from espn_dashboard.espn.errors import ESPNAuthError, ESPNUnavailableError
 
 from .conftest import VALID_COOKIE
 from .fixtures import SWID
-
-
-@pytest.fixture
-def client(settings, service):
-    main.set_service(service)
-    main.app.dependency_overrides[get_settings] = lambda: settings
-    with TestClient(main.app) as test_client:
-        test_client.settings = settings
-        yield test_client
-    main.app.dependency_overrides.clear()
-    main.set_service(None)
 
 
 def auth_header(settings, swid=SWID):

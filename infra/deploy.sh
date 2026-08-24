@@ -15,6 +15,10 @@ ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://nashstallings.github.io}"
 # job is infrastructure that changes far less often than the code, so it stays
 # with the human-run path.
 MANAGE_SCHEDULER="${MANAGE_SCHEDULER:-true}"
+# Publishing one league read-only: anyone with the site URL sees it, no ESPN
+# cookies needed. Empty means off — nothing is ever published by accident.
+PUBLIC_LEAGUE_ID="${PUBLIC_LEAGUE_ID:-}"
+PUBLIC_LEAGUE_SEASON="${PUBLIC_LEAGUE_SEASON:-}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "==> Deploying ${SERVICE} to ${REGION}"
@@ -28,7 +32,7 @@ gcloud run deploy "${SERVICE}" \
   --max-instances 5 \
   --memory 512Mi \
   --timeout 60s \
-  --set-env-vars "CREDENTIAL_STORE=firestore,GCP_PROJECT=${PROJECT},BIGQUERY_DATASET=${DATASET},ALLOWED_ORIGINS=${ALLOWED_ORIGINS},ESPN_CACHE_TTL_SECONDS=60" \
+  --set-env-vars "CREDENTIAL_STORE=firestore,GCP_PROJECT=${PROJECT},BIGQUERY_DATASET=${DATASET},ALLOWED_ORIGINS=${ALLOWED_ORIGINS},ESPN_CACHE_TTL_SECONDS=60,PUBLIC_LEAGUE_ID=${PUBLIC_LEAGUE_ID},PUBLIC_LEAGUE_SEASON=${PUBLIC_LEAGUE_SEASON}" \
   --set-secrets "CREDENTIAL_ENCRYPTION_KEY=espn-credential-key:latest,JWT_SECRET=espn-jwt-secret:latest,SYNC_TOKEN=espn-sync-token:latest"
 
 URL="$(gcloud run services describe "${SERVICE}" --region "${REGION}" --project "${PROJECT}" --format 'value(status.url)')"

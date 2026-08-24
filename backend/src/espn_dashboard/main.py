@@ -11,6 +11,7 @@ it, and nothing logs it.
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +32,7 @@ from .service import (
     DashboardService,
     LeagueAccessError,
     NotConnectedError,
+    PublicLeagueError,
     current_season,
 )
 from .store import build_store
@@ -105,6 +107,11 @@ async def _not_connected(_: Request, exc: NotConnectedError) -> JSONResponse:
 @app.exception_handler(LeagueAccessError)
 async def _league_access(_: Request, exc: LeagueAccessError) -> JSONResponse:
     return _error(403, "league_not_linked", str(exc))
+
+
+@app.exception_handler(PublicLeagueError)
+async def _public_league(_: Request, exc: PublicLeagueError) -> JSONResponse:
+    return _error(404, "public_league_unavailable", str(exc))
 
 
 @app.exception_handler(ESPNError)
@@ -309,6 +316,110 @@ async def power_rankings(
     service: DashboardService = Depends(get_service),
 ) -> dict:
     return await service.power_rankings(swid, league_id, _season(season_id))
+
+
+# --- public league -----------------------------------------------------------
+#
+# These routes take NO league identifier. The league is read from configuration,
+# so no request can steer them at a league other than the published one. They
+# require no credentials by design: this is the "send your leaguemates a link"
+# mode, enabled only when PUBLIC_LEAGUE_ID is set.
+
+
+def _public_headers(settings: Settings) -> dict[str, str]:
+    # noindex does not restrict access — anyone with the link still gets in. It
+    # only keeps a private league's rosters out of search results.
+    return {"X-Robots-Tag": "noindex, nofollow"} if settings.public_league_noindex else {}
+
+
+@app.get("/api/public/config")
+async def public_config(
+    settings: Settings = Depends(get_settings),
+    service: DashboardService = Depends(get_service),
+) -> JSONResponse:
+    """Whether public viewing is on. The frontend calls this before anything else."""
+    target = service.public_league
+    body: dict[str, Any] = {"enabled": target is not None}
+    if target is not None:
+        body["league_id"], body["season"] = target
+    return JSONResponse(content=body, headers=_public_headers(settings))
+
+
+@app.get("/api/public/overview")
+async def public_overview(
+    settings: Settings = Depends(get_settings),
+    service: DashboardService = Depends(get_service),
+) -> JSONResponse:
+    return JSONResponse(
+        content=await service.public_view("overview"), headers=_public_headers(settings)
+    )
+
+
+@app.get("/api/public/standings")
+async def public_standings(
+    settings: Settings = Depends(get_settings),
+    service: DashboardService = Depends(get_service),
+) -> JSONResponse:
+    return JSONResponse(
+        content=await service.public_view("standings"), headers=_public_headers(settings)
+    )
+
+
+@app.get("/api/public/matchups")
+async def public_matchups(
+    week: int | None = Query(default=None, ge=1, le=25),
+    settings: Settings = Depends(get_settings),
+    service: DashboardService = Depends(get_service),
+) -> JSONResponse:
+    return JSONResponse(
+        content=await service.public_view("matchups", week=week),
+        headers=_public_headers(settings),
+    )
+
+
+@app.get("/api/public/teams")
+async def public_teams(
+    settings: Settings = Depends(get_settings),
+    service: DashboardService = Depends(get_service),
+) -> JSONResponse:
+    return JSONResponse(
+        content=await service.public_view("teams"), headers=_public_headers(settings)
+    )
+
+
+@app.get("/api/public/teams/{team_id}/roster")
+async def public_roster(
+    team_id: int,
+    week: int | None = Query(default=None, ge=1, le=25),
+    settings: Settings = Depends(get_settings),
+    service: DashboardService = Depends(get_service),
+) -> JSONResponse:
+    return JSONResponse(
+        content=await service.public_view("roster", team_id=team_id, week=week),
+        headers=_public_headers(settings),
+    )
+
+
+@app.get("/api/public/transactions")
+async def public_transactions(
+    limit: int = Query(default=100, ge=1, le=200),
+    settings: Settings = Depends(get_settings),
+    service: DashboardService = Depends(get_service),
+) -> JSONResponse:
+    return JSONResponse(
+        content=await service.public_view("transactions", limit=limit),
+        headers=_public_headers(settings),
+    )
+
+
+@app.get("/api/public/power-rankings")
+async def public_power_rankings(
+    settings: Settings = Depends(get_settings),
+    service: DashboardService = Depends(get_service),
+) -> JSONResponse:
+    return JSONResponse(
+        content=await service.public_view("power_rankings"), headers=_public_headers(settings)
+    )
 
 
 # --- scheduled sync ----------------------------------------------------------

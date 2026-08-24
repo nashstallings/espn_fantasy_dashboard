@@ -35,6 +35,13 @@ const dom = {
   addLeagueSeason: document.getElementById("add-league-season"),
   addLeague: document.getElementById("add-league"),
   disconnect: document.getElementById("disconnect"),
+  // The wrapping label, so hiding the switcher hides its caption too.
+  leagueField: document.getElementById("league-select").closest(".field"),
+  publicBanner: document.getElementById("public-banner"),
+  publicBannerText: document.getElementById("public-banner-text"),
+  bannerConnect: document.getElementById("banner-connect"),
+  signIn: document.getElementById("sign-in"),
+  connectCancel: document.getElementById("connect-cancel"),
 };
 
 const state = {
@@ -44,6 +51,11 @@ const state = {
   week: null,
   teamId: null,
   teams: [],
+  // Read-only mode: the backend publishes one league and serves it without
+  // credentials. Viewers get the dashboard immediately; connecting is optional
+  // and only adds the account controls.
+  isPublic: false,
+  publicAvailable: false,
   // Bumped on every load; a slow response for a league you already switched
   // away from is discarded rather than painted over the new one.
   requestId: 0,
@@ -52,25 +64,64 @@ const state = {
 // --- boot --------------------------------------------------------------------
 
 async function boot() {
-  if (!getToken()) return showConnect();
+  // Ask about public viewing first: if a league is published, a visitor with no
+  // credentials should land on the dashboard, not a form asking for cookies.
   try {
-    state.account = await api.me();
-    showDashboard();
-  } catch (error) {
-    showConnect(error instanceof ApiError ? error.message : "Please reconnect.");
+    const config = await api.publicConfig();
+    state.publicAvailable = Boolean(config?.enabled);
+  } catch {
+    state.publicAvailable = false;
   }
+
+  if (getToken()) {
+    try {
+      state.account = await api.me();
+      state.isPublic = false;
+      return showDashboard();
+    } catch (error) {
+      // A dead session should fall back to the public view where one exists,
+      // rather than dead-ending on the connect form.
+      clearToken();
+      if (!state.publicAvailable) {
+        return showConnect(error instanceof ApiError ? error.message : "Please reconnect.");
+      }
+    }
+  }
+
+  if (state.publicAvailable) return showPublicDashboard();
+  showConnect();
+}
+
+function showPublicDashboard() {
+  state.isPublic = true;
+  state.account = null;
+  state.league = null;
+  dom.connect.hidden = true;
+  dom.app.hidden = false;
+  dom.publicBanner.hidden = false;
+  dom.leagueField.hidden = true;
+  dom.accountButton.hidden = true;
+  dom.signIn.hidden = false;
+  renderTabs();
+  loadView();
 }
 
 function showConnect(message = "") {
   clearToken();
   dom.app.hidden = true;
   dom.connect.hidden = false;
+  // Only offer "go back" when there is a public dashboard to go back to.
+  dom.connectCancel.hidden = !state.publicAvailable;
   setStatus(dom.connectStatus, message, message ? "error" : null);
 }
 
 function showDashboard() {
+  state.isPublic = false;
   dom.connect.hidden = true;
   dom.app.hidden = false;
+  dom.publicBanner.hidden = true;
+  dom.signIn.hidden = true;
+  dom.accountButton.hidden = false;
   populateLeagues();
   renderTabs();
   loadView();
@@ -117,11 +168,14 @@ function populateLeagues() {
   if (!leagues.length) {
     dom.leagueSelect.append(el("option", { value: "" }, "No leagues linked"));
     dom.leagueSelect.disabled = true;
+    dom.leagueField.hidden = false;
     state.league = null;
     return;
   }
 
   dom.leagueSelect.disabled = false;
+  // A switcher with one option is furniture, not a control.
+  dom.leagueField.hidden = leagues.length < 2;
   for (const league of leagues) {
     dom.leagueSelect.append(
       el(
@@ -180,10 +234,27 @@ dom.tabs.addEventListener("click", (event) => {
 
 dom.refresh.addEventListener("click", () => loadView());
 
+for (const button of [dom.signIn, dom.bannerConnect]) {
+  button.addEventListener("click", () => {
+    dom.app.hidden = true;
+    dom.connect.hidden = false;
+    dom.connectCancel.hidden = !state.publicAvailable;
+    setStatus(dom.connectStatus, "");
+  });
+}
+
+dom.connectCancel.addEventListener("click", () => {
+  dom.connectForm.reset();
+  showPublicDashboard();
+});
+
 // --- view loading ------------------------------------------------------------
 
 async function loadView() {
   renderTabs();
+
+  if (state.isPublic) return loadPublicView();
+
   if (!state.league) {
     clear(dom.view).append(
       empty("No leagues linked yet. Open Account to add one by its league ID."),
@@ -207,6 +278,79 @@ async function loadView() {
     }
     clear(dom.view).append(errorCard(error));
   }
+}
+
+async function loadPublicView() {
+  const requestId = ++state.requestId;
+  clear(dom.view).append(empty("Loading…"));
+  try {
+    const node = await buildPublicView();
+    if (requestId !== state.requestId) return;
+    clear(dom.view).append(node);
+  } catch (error) {
+    if (requestId !== state.requestId) return;
+    clear(dom.view).append(errorCard(error));
+  }
+}
+
+async function buildPublicView() {
+  switch (state.view) {
+    case "standings":
+      return renderStandings(await api.publicStandings());
+
+    case "matchups": {
+      const data = await api.publicMatchups(state.week ?? undefined);
+      state.week = data.week;
+      setPublicLeagueName(data.league);
+      return renderMatchups(data, {
+        onWeekChange: (week) => {
+          state.week = week;
+          loadView();
+        },
+      });
+    }
+
+    case "rosters": {
+      if (!state.teams.length) state.teams = (await api.publicTeams()).teams || [];
+      if (!state.teams.length) return empty("This league has no teams yet.");
+      if (!state.teams.some((team) => team.team_id === state.teamId)) {
+        state.teamId = state.teams[0].team_id;
+      }
+      const data = await api.publicRoster(state.teamId, state.week ?? undefined);
+      state.week = data.week;
+      return renderRosters(data, {
+        teams: state.teams,
+        selectedTeamId: state.teamId,
+        onTeamChange: (teamId) => {
+          state.teamId = teamId;
+          loadView();
+        },
+        onWeekChange: (week) => {
+          state.week = week;
+          loadView();
+        },
+      });
+    }
+
+    case "transactions":
+      return renderTransactions(await api.publicTransactions());
+
+    case "power":
+      return renderPowerRankings(await api.publicPowerRankings());
+
+    default: {
+      const data = await api.publicOverview();
+      setPublicLeagueName(data.league);
+      return renderOverview(data);
+    }
+  }
+}
+
+function setPublicLeagueName(league) {
+  const name = league?.name;
+  if (!name) return;
+  dom.publicBannerText.textContent = `${name} · public view, read only.`;
+  dom.footerNote.textContent = `${name} · season ${league.season} · live from ESPN`;
 }
 
 async function buildView(leagueId, season) {
@@ -324,6 +468,7 @@ dom.disconnect.addEventListener("click", async () => {
   state.account = null;
   state.league = null;
   dom.accountDialog.close();
+  if (state.publicAvailable) return showPublicDashboard();
   showConnect("Disconnected. Your stored credentials were deleted.");
 });
 

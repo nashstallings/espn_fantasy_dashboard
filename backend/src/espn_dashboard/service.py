@@ -49,6 +49,15 @@ class LeagueAccessError(Exception):
     """The caller asked for a league that is not linked to their account."""
 
 
+class PublicLeagueError(Exception):
+    """Public viewing was requested but cannot be served.
+
+    Either no public league is configured, or nobody with working credentials
+    for it is connected — the public view borrows a connected account's cookies,
+    so it stops working if that account disconnects.
+    """
+
+
 def current_season(today: datetime | None = None) -> int:
     """The NFL fantasy season a given date belongs to.
 
@@ -74,6 +83,9 @@ class DashboardService:
         self._store = store
         self._client = client or ESPNClient(timeout=settings.espn_request_timeout_seconds)
         self._cache = TTLCache(settings.espn_cache_ttl_seconds)
+        # Resolved lazily and re-resolved whenever accounts change, so the public
+        # view does not scan the credential store on every anonymous request.
+        self._public_owner: str | None = None
 
     @property
     def store(self) -> CredentialStore:
@@ -125,6 +137,7 @@ class DashboardService:
         record.last_validated_at = utcnow()
         self._store.put(record)
         self._cache.invalidate_prefix(f"{swid}|")
+        self._public_owner = None
 
         return ConnectResult(
             swid=swid, leagues=record.leagues, discovery_failed=discovery_failed
@@ -152,15 +165,71 @@ class DashboardService:
             return False
         self._store.put(record)
         self._cache.invalidate_prefix(f"{swid}|")
+        self._public_owner = None
         return True
 
     def disconnect(self, swid: str) -> bool:
         """Delete everything we hold for this account."""
         self._cache.invalidate_prefix(f"{swid}|")
+        # The public view may have been borrowing this account's cookies.
+        self._public_owner = None
         return self._store.delete(swid)
 
     def account(self, swid: str) -> CredentialRecord:
         return self._require_record(swid)
+
+    # --- public league --------------------------------------------------------
+
+    @property
+    def public_league(self) -> tuple[str, int] | None:
+        """(league_id, season) of the publicly viewable league, if configured."""
+        league_id = self._settings.public_league_id.strip()
+        if not league_id:
+            return None
+        return league_id, self._settings.public_league_season or current_season()
+
+    def public_owner_swid(self) -> str:
+        """A connected account whose cookies can read the public league.
+
+        The public view has no credentials of its own; it borrows those of a
+        member who has connected. Preferring a stable pick (lowest SWID) keeps
+        the cache key stable rather than flapping between accounts.
+        """
+        target = self.public_league
+        if target is None:
+            raise PublicLeagueError("no public league is configured")
+
+        if self._public_owner is not None:
+            return self._public_owner
+
+        league_id, season = target
+        candidates = [
+            record.swid
+            for record in self._store.list_all()
+            for ref in record.leagues
+            if ref.league_id == league_id and ref.season == season
+        ]
+        if not candidates:
+            raise PublicLeagueError(
+                f"league {league_id} ({season}) is published, but no connected "
+                "account can read it — someone in the league needs to connect"
+            )
+        self._public_owner = sorted(candidates)[0]
+        return self._public_owner
+
+    def public_view(self, name: str, **kwargs: Any):
+        """Call one of the league views as the borrowing account.
+
+        Every public route goes through here, and the league is taken from
+        configuration rather than from the request — so no amount of URL
+        tampering can reach a league other than the published one.
+        """
+        target = self.public_league
+        if target is None:
+            raise PublicLeagueError("no public league is configured")
+        league_id, season = target
+        method = getattr(self, name)
+        return method(self.public_owner_swid(), league_id, season, **kwargs)
 
     # --- league data ----------------------------------------------------------
 
