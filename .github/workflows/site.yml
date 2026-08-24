@@ -3,19 +3,27 @@ name: Build and publish the dashboard
 # The whole site is a build artifact: fetch ESPN, write JSON, publish to Pages.
 # No server is involved, so there is nothing to keep running between builds.
 
+# PAUSED. Automatic runs are switched off until the repository is configured —
+# the build needs ESPN_SWID + ESPN_S2 (secrets) and LEAGUE_ID (variable), and
+# without them every scheduled run failed at the first step.
+#
+# To switch it back on, add those, then uncomment the two triggers below:
+#
+#   schedule:
+#     # Every 15 minutes. GitHub treats scheduled runs as best-effort and delays
+#     # them under load — especially at the top of the hour — so treat this as
+#     # "about every 15-40 minutes", which is why the page stamps its own age.
+#     - cron: "*/15 * * * *"
+#   push:
+#     branches: [main]
+#     paths:
+#       - "frontend/**"
+#       - "backend/src/espn_dashboard/**"
+#       - ".github/workflows/site.yml"
+#
+# Until then it runs only when started by hand from the Actions tab.
 on:
-  schedule:
-    # Every 15 minutes. GitHub treats scheduled runs as best-effort and delays
-    # them under load — especially at the top of the hour — so treat this as
-    # "about every 15-40 minutes", which is why the page stamps its own age.
-    - cron: "*/15 * * * *"
-  push:
-    branches: [main]
-    paths:
-      - "frontend/**"
-      - "backend/src/espn_dashboard/**"
-      - ".github/workflows/site.yml"
-  workflow_dispatch: # the manual refresh button
+  workflow_dispatch:
 
 permissions:
   contents: read

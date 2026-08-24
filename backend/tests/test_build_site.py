@@ -170,9 +170,24 @@ def test_swid_braces_are_added(monkeypatch):
     assert credentials_from_env().swid == SWID
 
 
-@pytest.mark.parametrize(("swid", "s2"), [("", "cookie"), (SWID, ""), ("", "")])
-def test_missing_credentials_fail_loudly(monkeypatch, swid, s2):
+@pytest.mark.parametrize(
+    ("swid", "s2", "named"),
+    [
+        ("", "cookie", ["ESPN_SWID"]),
+        (SWID, "", ["ESPN_S2"]),
+        ("", "", ["ESPN_SWID", "ESPN_S2"]),
+    ],
+)
+def test_missing_credentials_name_what_is_missing(monkeypatch, swid, s2, named):
+    """An unconfigured build should say which value to set, and where."""
     monkeypatch.setenv("ESPN_SWID", swid)
     monkeypatch.setenv("ESPN_S2", s2)
-    with pytest.raises(BuildError, match="must both be set"):
+    with pytest.raises(BuildError) as caught:
         credentials_from_env()
+
+    message = str(caught.value)
+    for name in named:
+        assert name in message
+    for name in {"ESPN_SWID", "ESPN_S2"} - set(named):
+        assert name not in message, "a value that was set should not be reported missing"
+    assert "Secrets and variables" in message, "the error should say where to fix it"
